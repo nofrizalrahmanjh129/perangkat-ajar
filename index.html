@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Perangkat Ajar</title>
+<style>
+:root{--p:#1d4ed8;--bg:#f5f7fb;--line:#d7dce5;--ink:#1f2937}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:var(--p);color:#fff;padding:12px 18px}
+header h1{margin:0;font-size:18px}
+.wrap{display:flex;min-height:calc(100vh - 50px)}
+nav{width:250px;background:#fff;border-right:1px solid var(--line);overflow:auto;padding:8px;position:sticky;top:0;height:calc(100vh - 50px)}
+nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink)}
+nav button.on,nav button:hover{background:#e8efff;color:var(--p);font-weight:600}
+main{flex:1;padding:18px;overflow:auto;min-width:0}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--line);padding:4px;vertical-align:top}
+th{background:#eef2f8;text-align:left;font-size:12px}
+input,select,textarea{width:100%;padding:5px;border:1px solid #c5ccd8;border-radius:5px;font:inherit;background:#fff}
+textarea{min-height:60px;resize:vertical}
+.hd select{width:auto;padding:2px}
+.pv{display:none}
+.btn{background:var(--p);color:#fff;border:0;border-radius:6px;padding:7px 12px;cursor:pointer;margin:4px 4px 4px 0;font:inherit}
+.btn.g{background:#0f766e}
+.btn.xl{background:#15803d}
+.btn.dx{background:#7c3aed}
+.btn.pdf{background:#334155}
+.btn:hover{filter:brightness(.92)}
+.btn.r{background:#dc2626;padding:3px 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid2 label,label.f{display:block;font-size:12px;color:#555;margin-bottom:6px}
+.toolbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:10px}
+.hint{color:#6b7280;font-size:12px}
+.kop{text-align:center;border-bottom:3px double #000;padding-bottom:8px;margin-bottom:12px}
+.sig{display:flex;justify-content:space-between;margin-top:40px;text-align:center}
+.sig div{width:40%}
+.cover{min-height:700px;text-align:center;padding:60px 30px}
+@media print{
+  nav,header,.noprint,.toolbar{display:none!important}
+  .wrap{display:block}main{padding:0}
+  .card{border:0;padding:0;margin:0 0 10px}
+  body{background:#fff}
+  input,select,textarea{border:0;background:none;padding:0}
+  input[type=date]{display:none!important}
+  .pv{display:inline!important}
+  select{-webkit-appearance:none;appearance:none}
+  th,td{font-size:11px}
+}
+@media(max-width:800px){
+  .wrap{flex-direction:column}
+  nav{width:auto;height:auto;position:static;display:flex;overflow-x:auto;white-space:nowrap}
+  nav button{width:auto}
+  .grid2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header><h1>Perangkat Ajar — Mata Pelajaran Umum &amp; Produktif</h1></header>
+<div class="wrap">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+const KEY='perangkatAjar.v2';
+const CLASSES=['XI TJKT 1','XI TJKT 2','XII TJKT 1','XII TJKT 2','XII TJKT 3'];
+let STORE={active:CLASSES[0],profiles:{}};
+let DB={};
+function save(){try{localStorage.setItem(KEY,JSON.stringify(STORE))}catch(e){}}
+
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const ID=()=>DB.id||{};
+const kv=c=>(DB.kv||{})[c]||'';
+const kkm=()=>+ID().kkmTuntas||87;
+const batasKompeten=()=>+ID().batasKompeten||95;
+const BULAN=['Juli','Agustus','September','Oktober','November','Desember','Januari','Februari','Maret','April','Mei','Juni'];
+const BLN_S=['Jul','Agu','Sep','Okt','Nov','Des','Jan','Feb','Mar','Apr','Mei','Jun'];
+const SK=['','SB','B','C','K'];
+const TABLES={};
+
+const ID_FIELDS=[
+ ['sekolah','Nama Sekolah'],['alamat','Alamat Sekolah'],['kepsek','Nama Kepala Sekolah'],['nipKepsek','NIP Kepala Sekolah'],
+ ['guru','Nama Guru'],['nip','NIP Guru'],['mapel','Mata Pelajaran'],['kelas','Kelas (contoh: X / XI / XII)'],
+ ['konsentrasi','Konsentrasi Keahlian / Program'],['semester','Semester (Ganjil / Genap)'],['tahun','Tahun Ajaran (contoh: 2026/2027)'],
+ ['wali','Nama Wali Kelas'],['kkmTuntas','Batas nilai tuntas (di bawah ini = tidak tuntas)'],['batasKompeten','Batas nilai kompeten']
+];
+
+/* ---------- helpers: sel & cell ---------- */
+function cell(key,i,c,r){
+  const v=(r||{})[c.k]??'';
+  const a=`data-k="${key}" data-i="${i}" data-c="${c.k}"`;
+  if(c.t==='sel') return `<select ${a}>${c.o.map(o=>`<option${o===String(v)?' selected':''}>${o}</option>`).join('')}</select>`;
+  if(c.t==='ta') return `<textarea ${a}>${esc(v)}</textarea>`;
+  const type=c.t==='n'?'number':c.t==='d'?'date':'text';
+  return `<input ${a} type="${type}" value="${esc(v)}">`;
+}
+
+/* ---------- generic table & cards ---------- */
+function tbl(key,cols,o={}){
+  const blank=o.blank||{};
+  TABLES[key]={blank,cols};
+  if(!DB[key]) DB[key]=clone(o.init||[blank]);
+  const rows=DB[key];
+  return `<div class="card">
+  <div class="toolbar noprint"><button class="btn" data-act="add" data-k="${key}">+ Tambah baris</button><button class="btn xl" title="Unduh tabel ini sebagai Excel" onclick="xlTable('${key}')">⬇ Excel</button><button class="btn dx" title="Unduh tabel ini sebagai Word" onclick="ex('word','${key}')">⬇ Word</button><button class="btn pdf" title="Unduh tabel ini sebagai PDF" onclick="ex('pdf','${key}')">⬇ PDF</button><button class="btn g" title="Buka dialog cetak" onclick="window.print()">🖨 Cetak</button></div>
+  ${o.note?`<p class="hint noprint">${o.note}</p>`:''}
+  <div style="overflow:auto"><table><thead><tr><th style="width:34px">No</th>${cols.map(c=>`<th>${c.l}</th>`).join('')}<th class="noprint" style="width:40px"></th></tr></thead>
+  <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td>${cols.map(c=>`<td>${cell(key,i,c,r)}</td>`).join('')}<td class="noprint"><button class="btn r" data-act="del" data-k="${key}" data-i="${i}">×</button></td></tr>`).join('')}</tbody></table></div>
+  </div>`;
+}
+function cards(key,title,fields,o={}){
+  TABLES[key]={blank:o.blank||{},fields};
+  if(!DB[key]) DB[key]=[];
+  const items=DB[key];
+  const head=`<div class="toolbar noprint"><button class="btn" data-act="add" data-k="${key}">+ Tambah ${title}</button><button class="btn g" onclick="window.print()">Cetak</button></div>`;
+  const body=items.map((it,i)=>`<div class="card">
+    <div class="toolbar noprint"><b>${title} ${i+1}</b><span style="flex:1"></span><button class="btn dx" title="Unduh modul ini sebagai Word" onclick="docxItem('${key}',${i})">⬇ Word</button><button class="btn pdf" title="Unduh modul ini sebagai PDF" onclick="pdfItem('${key}',${i})">⬇ PDF</button><button class="btn r" data-act="del" data-k="${key}" data-i="${i}">Hapus</button></div>
+    ${fields.map(([c,l,t])=>`<label class="f" style="display:block;margin:8px 0"><b>${l}</b>${cell(key,i,{k:c,t:t||'ta'},it)}</label>`).join('')}
+  </div>`).join('');
+  return head+(body||`<p class="hint">Belum ada isi. Klik "Tambah".</p>`);
+}
+
+/* ---------- print wrapper ---------- */
+function kop(t){
+  const I=ID();
+  return `<div class="kop"><b>${esc(I.sekolah||'NAMA SEKOLAH')}</b><br><small>${esc(I.alamat||'')}</small>
+  <h2 style="margin:8px 0 0">${esc(t)}</h2>
+  <small>${esc(I.mapel||'Mata Pelajaran')} · Kelas ${esc(I.kelas||'-')} · Semester ${esc(I.semester||'-')} · TA ${esc(I.tahun||'-')}</small></div>`;
+}
+function sig(){
+  const I=ID();
+  return `<div class="sig"><div>Mengetahui,<br>Kepala Sekolah<br><br><br><b>${esc(I.kepsek||'................')}</b><br>NIP. ${esc(I.nipKepsek||'................')}</div>
+  <div>Guru Mata Pelajaran<br><br><br><br><b>${esc(I.guru||'................')}</b><br>NIP. ${esc(I.nip||'................')}</div></div>`;
+}
+function P(title,body,withSig=true){return kop(title)+body+(withSig?sig():'')}
+
+/* ---------- calc: rata, predikat, kehadiran ---------- */
+function rata(i){
+  const c=comps(i);let s=0,wt=0;
+  Object.keys(WEIGHTS).forEach(k=>{if(c[k]!==null&&c[k]!==undefined){s+=c[k]*WEIGHTS[k];wt+=WEIGHTS[k]}});
+  return wt?(s/wt).toFixed(1):'';
+}
+function predikat(avg){
+  if(avg==='') return '';
+  const a=+avg;
+  const rows=(DB.kktp||[]).map(r=>({min:parseFloat(r.min),pr:r.predikat})).filter(r=>!isNaN(r.min)).sort((x,y)=>y.min-x.min);
+  const f=rows.find(r=>a>=r.min);
+  return f?f.pr:'';
+}
+function kehadiran(i){
+  let h=0,t=0;
+  ((DB.hadirkls||{})[i]||[]).forEach(x=>{if(x){t++;if(x==='H')h++}});
+  return t?Math.round(h/t*100):'';
+}
+const CALC={
+  hrekap:(st,i)=>{
+    const r=((DB[st]||{})[i])||[];const c={H:0,I:0,A:0,S:0,D:0};
+    r.forEach(x=>{if(c[x]!==undefined)c[x]++});
+    return `H${c.H} I${c.I} A${c.A} S${c.S} D${c.D}`;
+  },
+  pct:(st,i)=>{const v=kehadiran(i);return v===''?'':v+'%'},
+  pp:(st,i)=>{const [p,kind]=st.split('|');const v=ppScore(+p,i,kind);return v===null?'':v.toFixed(0)},
+  uhAvg:(st,i)=>{const u=uhList(i);return u.length?(u.reduce((a,b)=>a+b,0)/u.length).toFixed(1):''},
+  rata:(st,i)=>rata(i),
+  pred:(st,i)=>predikat(rata(i)),
+  status:(st,i)=>{
+    const a=rata(i);if(a==='') return '';
+    const v=+a;
+    if(v>=batasKompeten()) return 'Kompeten';
+    if(v>=kkm()) return 'Tuntas';
+    return 'Tidak tuntas';
+  }
+};
+function refreshCalc(){
+  document.querySelectorAll('[data-calc]').forEach(el=>{
+    el.textContent=CALC[el.dataset.calc](el.dataset.st||'',+el.dataset.i);
+  });
+}
+
+/* ---------- hadir grid ---------- */
+function hadirGrid(store,n,head,extraHead=''){
+  const S=DB.siswa||[];
+  if(!S.length) return `<div class="card hint">Isi Data Siswa dulu di menu 16. Data Nilai.</div>`;
+  const g=DB[store]||{};
+  const days=Array.from({length:n},(_,d)=>d);
+  return `<div class="card"><div style="overflow:auto"><table>
+  <thead>${extraHead}<tr><th>No</th><th>Nama Siswa</th>${days.map(d=>`<th>${head}${d+1}</th>`).join('')}<th>Rekap</th></tr></thead>
+  <tbody>${S.map((s,i)=>`<tr><td>${i+1}</td><td style="white-space:nowrap">${esc(s.nama)}</td>
+  ${days.map(d=>{const v=(g[i]||[])[d]||'';return `<td class="hd"><select data-k="${store}" data-i="${i}" data-d="${d}">${['','H','I','A','S','D'].map(o=>`<option${o===v?' selected':''}>${o}</option>`).join('')}</select></td>`}).join('')}
+  <td data-calc="hrekap" data-st="${store}" data-i="${i}">${CALC.hrekap(store,i)}</td></tr>`).join('')}</tbody></table></div>
+  <p class="hint">Keterangan: H = Hadir, I = Izin, A = Alfa, S = Sakit, D = Dispensasi</p></div>`;
+}
+
+/* ---------- pages ---------- */
+function pgId(){
+  return `<div class="card"><h2>Identitas &amp; Pengaturan</h2><div class="grid2">
+  ${ID_FIELDS.map(([k,l])=>`<label>${l}<input data-k="id" data-c="${k}" value="${esc(ID()[k])}"></label>`).join('')}
+  </div>
+  <p class="hint">Data di sini otomatis dipakai di semua halaman. Tersimpan di browser perangkat ini.</p>
+  <div class="toolbar"><button class="btn" onclick="expo()">Ekspor data (.json)</button>
+  <label class="btn g" style="cursor:pointer">Impor data<input type="file" accept=".json" onchange="impo(this)" style="display:none"></label></div>
+  </div>`;
+}
+function pgCover(){
+  const I=ID();
+  return `<div class="card cover">
+  <p>PERANGKAT PEMBELAJARAN</p>
+  <h1>${esc(I.mapel||'MATA PELAJARAN')}</h1>
+  <p>Kelas ${esc(I.kelas||'-')} ${I.konsentrasi?'— '+esc(I.konsentrasi):''}</p>
+  <p>Semester ${esc(I.semester||'-')} · Tahun Ajaran ${esc(I.tahun||'-')}</p>
+  <br><br><b>${esc(I.sekolah||'NAMA SEKOLAH')}</b><p>${esc(I.alamat||'')}</p>
+  <br><br><p>Nama Guru: ${esc(I.guru||'-')}<br>NIP: ${esc(I.nip||'-')}</p>
+  </div>`;
+}
+function pgATP(){
+  const cols=[{k:'elemen',l:'Elemen',t:'ta'},{k:'cp',l:'Capaian Pembelajaran',t:'ta'},{k:'tp',l:'Tujuan Pembelajaran',t:'ta'},{k:'materi',l:'Alur / Materi',t:'ta'},{k:'jp',l:'JP',t:'n'},{k:'sem',l:'Semester',t:'sel',o:['','1','2']}];
+  return P('Alur Tujuan Pembelajaran (ATP)', tbl('atp',cols,{blank:{},note:'Isi berurutan sesuai alur pembelajaran. Tujuan pembelajaran disusun dari CP fase/kelas.'}));
+}
+function pgCPTP(){
+  const cols=[{k:'elemen',l:'Elemen',t:'ta'},{k:'cp',l:'Capaian Pembelajaran (CP)',t:'ta'},{k:'tp',l:'Tujuan Pembelajaran (TP)',t:'ta'},{k:'kk',l:'Kata Kerja Operasional',t:'tx'},{k:'materi',l:'Materi Pokok',t:'ta'},{k:'indikator',l:'Indikator Ketercapaian',t:'ta'}];
+  return P('Analisis CP — TP', tbl('cptp',cols,{blank:{}}));
+}
+function pgProta(){
+  const cols=[{k:'materi',l:'Bab / Materi',t:'ta'},{k:'jp',l:'JP',t:'n'}].concat(BLN_S.map((b,i)=>({k:'b'+i,l:b,t:'sel',o:['','✓']})));
+  return P('Program Tahunan (Prota)', tbl('prota',cols,{blank:{}}));
+}
+function pgPromes(){
+  const cols=[{k:'pekan',l:'Pekan',t:'n'},{k:'tgl',l:'Tanggal',t:'d'},{k:'materi',l:'Materi / Topik',t:'ta'},{k:'tp',l:'Tujuan Singkat',t:'ta'},{k:'jp',l:'JP',t:'n'},{k:'ket',l:'Keterangan',t:'tx'}];
+  return P('Program Semester (Promes)', tbl('promes',cols,{blank:{}}));
+}
+function pgKKTP(){
+  const cols=[{k:'min',l:'Nilai Minimal',t:'n'},{k:'predikat',l:'Predikat',t:'tx'},{k:'desc',l:'Deskripsi Capaian',t:'ta'}];
+  const init=[
+    {min:90,predikat:'A (Sangat Baik)',desc:'Menguasai seluruh tujuan pembelajaran dengan sangat baik dan mandiri.'},
+    {min:80,predikat:'B (Baik)',desc:'Menguasai sebagian besar tujuan pembelajaran dengan baik.'},
+    {min:70,predikat:'C (Cukup)',desc:'Menguasai tujuan pembelajaran dasar, perlu sedikit penguatan.'},
+    {min:0,predikat:'D (Perlu Bimbingan)',desc:'Belum menguasai tujuan pembelajaran, perlu bimbingan dan remedial.'}
+  ];
+  return P('Kriteria Ketercapaian Tujuan Pembelajaran (KKTP)', tbl('kktp',cols,{blank:{min:0,predikat:'',desc:''},init}));
+}
+function pgJurnal(){
+  const cols=[{k:'tgl',l:'Tanggal',t:'d'},{k:'kelas',l:'Kelas',t:'tx'},{k:'materi',l:'Materi',t:'ta'},{k:'kegiatan',l:'Kegiatan Pembelajaran',t:'ta'},{k:'hadir',l:'Jumlah Hadir',t:'n'},{k:'refleksi',l:'Refleksi / Catatan',t:'ta'}];
+  return P('Jurnal Mengajar Harian', tbl('jurnal',cols,{blank:{}}));
+}
+function pgModul(){
+  const f=[['judul','Judul Bab / Modul','tx'],['alokasi','Alokasi Waktu','tx'],['tujuan','Tujuan Pembelajaran'],['pemahaman','Pemahaman Bermakna'],['pemantik','Pertanyaan Pemantik'],
+  ['pembuka','Kegiatan Pendahuluan (Memahami)'],['inti','Kegiatan Inti (Mengaplikasikan)'],['penutup','Kegiatan Penutup (Merefleksi)'],
+  ['asesmen','Asesmen (Diagnostik, Formatif, Sumatif)'],['remedial','Remedial'],['pengayaan','Pengayaan'],['sumber','Sumber Belajar & Media']];
+  return kop('Modul Ajar per Bab')+cards('modul','Modul',f)+'';
+}
+function pgBahan(){
+  const f=[['judul','Judul Bab','tx'],['ringkasan','Ringkasan Materi'],['isi','Isi / Uraian Materi'],['contoh','Contoh Soal / Kasus'],['latihan','Latihan Soal'],['kunci','Kunci Jawaban']];
+  return kop('Bahan Ajar')+cards('bahan','Bab',f);
+}
+function pgAdmin(){
+  const cols=[{k:'nama',l:'Dokumen / Kegiatan',t:'tx'},{k:'status',l:'Status',t:'sel',o:['','Belum','Proses','Selesai']},{k:'catatan',l:'Catatan',t:'ta'}];
+  const init=['Data siswa (buku induk)','Daftar hadir siswa','Daftar nilai & leger','Catatan sikap & keaktifan','Buku penghubung orang tua','Rekap pembinaan siswa','Komunikasi / rapat dengan orang tua','Berkas kenaikan kelas / kelulusan','Pengumpulan administrasi kepada kepala sekolah'].map(n=>({nama:n,status:'',catatan:''}));
+  return P('Administrasi Wali Kelas', tbl('admin',cols,{blank:{nama:'',status:'',catatan:''},init}));
+}
+function pgAnalisis(){
+  const S=DB.siswa||[];
+  const a=S.map((s,i)=>rata(i)).filter(v=>v!=='').map(Number);
+  const n=a.length;
+  const mean=n?(a.reduce((x,y)=>x+y,0)/n).toFixed(1):'-';
+  const max=n?Math.max(...a):'-', min=n?Math.min(...a):'-';
+  const tun=a.filter(v=>v>=kkm()).length;
+  const dist=(DB.kktp||[]).map(r=>`<tr><td>${esc(r.predikat)}</td><td>${a.filter(v=>predikat(String(v))===r.predikat).length}</td></tr>`).join('');
+  return P('Analisis Penilaian',
+  `<div class="card"><table>
+   <tr><th>Jumlah siswa dinilai</th><td>${n}</td></tr>
+   <tr><th>Rata-rata kelas</th><td>${mean}</td></tr>
+   <tr><th>Nilai tertinggi</th><td>${max}</td></tr>
+   <tr><th>Nilai terendah</th><td>${min}</td></tr>
+   <tr><th>Batas nilai tuntas</th><td>${kkm()}</td></tr>
+   <tr><th>Batas nilai kompeten</th><td>${batasKompeten()}</td></tr>
+   <tr><th>Tuntas</th><td>${tun} siswa (${n?Math.round(tun/n*100):0}%)</td></tr>
+   <tr><th>Belum tuntas</th><td>${n-tun} siswa</td></tr></table>
+   <p class="hint">Dihitung otomatis dari menu Daftar Nilai (rata-rata pengetahuan &amp; keterampilan).</p></div>
+   <div class="card"><h3>Sebaran Predikat</h3><table>${dist||'<tr><td>Isi KKTP terlebih dahulu.</td></tr>'}</table></div>
+   <div class="card"><h3>Analisis &amp; Tindak Lanjut</h3>
+   <textarea data-k="kv" data-c="analisis" style="min-height:160px">${esc(kv('analisis'))}</textarea></div>`);
+}
+function pgDeep(){
+  return P('Panduan Pembelajaran Mendalam (Deep Learning)',
+  `<div class="card"><h3>Tiga Landasan</h3>
+  <ul><li><b>Berkesadaran (mindful)</b>: siswa hadir secara penuh dan sadar akan tujuan belajarnya.</li>
+  <li><b>Bermakna (meaningful)</b>: materi dikaitkan dengan pengalaman dan dunia nyata siswa.</li>
+  <li><b>Menggembirakan (joyful)</b>: suasana belajar aman, positif, dan memotivasi.</li></ul></div>
+  <div class="card"><h3>Tiga Tahap Kegiatan</h3>
+  <ol><li><b>Memahami</b>: pemantik, eksplorasi konsep, dan pertanyaan pembuka.</li>
+  <li><b>Mengaplikasikan</b>: siswa menerapkan konsep lewat proyek, praktik, atau kasus.</li>
+  <li><b>Merefleksi</b>: siswa dan guru menilai proses serta hasil belajar.</li></ol></div>
+  <div class="card"><h3>Peran Guru</h3><ul>
+  <li>Berperan sebagai fasilitator yang mengajukan pertanyaan, bukan hanya memberi jawaban.</li>
+  <li>Memberi ruang kolaborasi dan umpan balik yang berkelanjutan.</li>
+  <li>Menyesuaikan kegiatan dengan kebutuhan dan minat belajar siswa.</li></ul></div>`);
+}
+function pgHadir(){
+  const b=DB.bulanH||BULAN[0];
+  const sel=`<div class="card noprint"><label>Bulan: <select onchange="DB.bulanH=this.value;save();render()">${BULAN.map(x=>`<option${x===b?' selected':''}>${x}</option>`).join('')}</select></label></div>`;
+  return P('Daftar Hadir Siswa — '+b, sel+hadirGrid('hadir_'+b,31,''));
+}
+function pgHadirKls(){
+  return P('Daftar Hadir Kelas (per Pertemuan)', hadirGrid('hadirkls',16,'P',dateHead()));
+}
+function pgNilaiLama(){
+  const S=DB.siswa||[];
+  if(!S.length) return P('Daftar Nilai','<div class="card hint">Isi Data Siswa dulu di menu 16. Data Nilai.</div>');
+  const rows=S.map((s,i)=>{
+    const n=(DB.nilai||[])[i]||{};
+    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${esc(s.nama)}</td>
+    <td><input type="number" min="0" max="100" data-k="nilai" data-i="${i}" data-c="p" value="${esc(n.p)}"></td>
+    <td><input type="number" min="0" max="100" data-k="nilai" data-i="${i}" data-c="k" value="${esc(n.k)}"></td>
+    <td><select data-k="nilai" data-i="${i}" data-c="sikap">${SK.map(o=>`<option${o===(n.sikap||'')?' selected':''}>${o}</option>`).join('')}</select></td>
+    <td data-calc="pct" data-i="${i}">${CALC.pct('',i)}</td>
+    <td><select data-k="nilai" data-i="${i}" data-c="aktif">${SK.map(o=>`<option${o===(n.aktif||'')?' selected':''}>${o}</option>`).join('')}</select></td>
+    <td data-calc="rata" data-i="${i}">${rata(i)}</td>
+    <td data-calc="pred" data-i="${i}">${predikat(rata(i))}</td>
+    <td data-calc="status" data-i="${i}">${CALC.status('',i)}</td></tr>`;
+  }).join('');
+  return P('Daftar Nilai (Pengetahuan, Keterampilan, Sikap, Kehadiran, Keaktifan)',
+  `<div class="card"><div style="overflow:auto"><table><thead><tr>
+  <th>No</th><th>Nama Siswa</th><th>Pengetahuan</th><th>Keterampilan</th><th>Nilai Sikap</th><th>Kehadiran</th><th>Keaktifan</th><th>Rata-rata</th><th>Predikat</th><th>Status</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="hint">Sikap &amp; keaktifan: SB = Sangat Baik, B = Baik, C = Cukup, K = Kurang. Kehadiran dihitung dari menu Daftar Hadir.</p></div>`);
+}
+function pgData(){
+  const cols=[{k:'nis',l:'NIS',t:'tx'},{k:'nama',l:'Nama Siswa',t:'tx'},{k:'jk',l:'L/P',t:'sel',o:['L','P']}];
+  const S=DB.siswa||[];
+  const rekap=S.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.nama)}</td><td data-calc="rata" data-i="${i}">${rata(i)}</td><td data-calc="pred" data-i="${i}">${predikat(rata(i))}</td><td data-calc="status" data-i="${i}">${CALC.status('',i)}</td></tr>`).join('');
+  return kop('Data Nilai')+importBar()+tbl('siswa',cols,{blank:{nis:'',nama:'',jk:'L'},note:'Daftar siswa dipakai di Daftar Hadir dan Daftar Nilai. Jika menghapus siswa, isi nilai/hadir siswa berikutnya perlu dicek ulang.'})+
+  `<div class="card"><h3>Rekap Nilai Akhir</h3><div style="overflow:auto"><table><thead><tr><th>No</th><th>Nama</th><th>Rata-rata</th><th>Predikat</th><th>Status</th></tr></thead><tbody>${rekap||'<tr><td colspan="5">Belum ada siswa.</td></tr>'}</tbody></table></div></div>`;
+}
+
+const PAGES=[
+ ['id','Identitas & Pengaturan',pgId],
+ ['atp','1. ATP',pgATP],
+ ['cptp','2. Analisis CP-TP',pgCPTP],
+ ['prota','3. Prota',pgProta],
+ ['promes','4. Promes',pgPromes],
+ ['kktp','5. KKTP',pgKKTP],
+ ['jurnal','6. Jurnal Mengajar Harian',pgJurnal],
+ ['modul','7. Modul Ajar per Bab',pgModul],
+ ['cover','8. Cover',pgCover],
+ ['bahan','9. Bahan Ajar',pgBahan],
+ ['admin','10. Administrasi Wali Kelas',pgAdmin],
+ ['analisis','11. Analisis Penilaian',pgAnalisis],
+ ['deep','12. Panduan Deep Learning',pgDeep],
+ ['hadir','13. Daftar Hadir (Bulanan)',pgHadir],
+ ['hadirkls','14. Daftar Hadir Kelas',pgHadirKls],
+ ['rubrik','Rubrik per Pertemuan (tambahan)',pgRubrik],
+ ['ulangan','Ulangan Harian & Ujian (tambahan)',pgUlangan],
+ ['nilai','15. Daftar Nilai',pgNilai],
+ ['data','16. Data Nilai',pgData]
+];
+
+let cur='id';
+function render(){
+  document.getElementById('nav').innerHTML=classSelect()+PAGES.map(([id,l])=>`<button class="${id===cur?'on':''}" onclick="go('${id}')">${l}</button>`).join('');
+  const p=PAGES.find(x=>x[0]===cur);
+  document.getElementById('main').innerHTML=p[2]();
+  refreshCalc();
+}
+function go(id){cur=id;render();window.scrollTo(0,0)}
+
+function expo(){
+  const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='perangkat-ajar.json';a.click();
+}
+function impo(f){
+  const r=new FileReader();
+  r.onload=()=>{try{DB=JSON.parse(r.result);STORE.profiles[STORE.active]=DB;save();render()}catch(e){alert('File tidak valid')}};
+  r.readAsText(f.files[0]);
+}
+
+/* events */
+const main=document.getElementById('main');
+main.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  const a=b.dataset.act,k=b.dataset.k;
+  if(a==='add'){DB[k]=DB[k]||[];DB[k].push(clone((TABLES[k]||{}).blank||{}));save();render()}
+  if(a==='addInd'){rubrikP(+b.dataset.p).ind.push({t:'',k:'tugas'});save();render()}
+  if(a==='delInd'){rubrikP(+b.dataset.p).ind.splice(+b.dataset.i,1);save();render()}
+  if(a==='addUh'){DB.uhCols=DB.uhCols||[];DB.uhCols.push('UH '+(DB.uhCols.length+1));save();render()}
+  if(a==='delUh'){const j=+b.dataset.i;DB.uhCols.splice(j,1);Object.keys(DB.uh||{}).forEach(s=>{if(DB.uh[s])DB.uh[s].splice(j,1)});save();render()}
+  if(a==='del'){DB[k].splice(+b.dataset.i,1);save();render()}
+});
+main.addEventListener('input',e=>{
+  const t=e.target,k=t.dataset.k;if(!k)return;
+  const i=t.dataset.i,c=t.dataset.c,d=t.dataset.d;
+  if(k==='rubMat'){rubrikP(+t.dataset.p).materi=t.value}
+  else if(k==='rubInd'){rubrikP(+t.dataset.p).ind[+i][c]=t.value}
+  else if(k==='rubNil'){const R=rubrikP(+t.dataset.p);R.nilai=R.nilai||{};R.nilai[i]=R.nilai[i]||[];R.nilai[i][+d]=t.value}
+  else if(k==='uhCol'){DB.uhCols=DB.uhCols||[];DB.uhCols[+i]=t.value}
+  else if(k==='ujian'){DB.ujian=DB.ujian||{};DB.ujian[i]=t.value}
+  else if(k==='tglPert'){DB.tglPert=DB.tglPert||[];DB.tglPert[+i]=t.value}
+  else if(k==='id'){DB.id=DB.id||{};DB.id[c]=t.value}
+  else if(k==='kv'){DB.kv=DB.kv||{};DB.kv[c]=t.value}
+  else if(d!==undefined){DB[k]=DB[k]||{};DB[k][i]=DB[k][i]||[];DB[k][i][+d]=t.value}
+  else {DB[k]=DB[k]||[];DB[k][i]=DB[k][i]||{};DB[k][i][c]=t.value}
+  save();refreshCalc();
+});
+main.addEventListener('change',e=>{
+  // untuk <select> tertentu agar sinkron di semua browser
+  const t=e.target;if(t.tagName==='SELECT'&&t.dataset.k&&t.dataset.k!=='kv'&&t.dataset.k!=='id'&&!t.onchange){
+    const evt=new Event('input',{bubbles:true});t.dispatchEvent(evt);
+  }
+});
+
+/* ---------- pemilih kelas ---------- */
+function classSelect(){
+  return `<select onchange="switchKelas(this.value)" style="width:100%;margin-bottom:10px;padding:6px">${CLASSES.map(c=>`<option${c===STORE.active?' selected':''}>${c}</option>`).join('')}</select>`;
+}
+function switchKelas(c){STORE.active=c;DB=STORE.profiles[c];save();render()}
+
+/* ---------- rubrik per pertemuan, ulangan & ujian, nilai akhir berbobot ---------- */
+/* ---------- unduhan Word & PDF sebagai alternatif cetak ---------- */
+function headLines(title){
+  const I=ID();
+  return [{t:title,b:1},{t:[I.sekolah,I.mapel].filter(Boolean).join(' - ')},
+    {t:`Kelas ${I.kelas||'-'} | Semester ${I.semester||'-'} | TA ${I.tahun||'-'}`},{t:' '}];
+}
+function tableLines(key){
+  const T=TABLES[key]||{},cols=T.cols||[],rows=DB[key]||[];
+  const out=[{t:cols.map(c=>c.l).join(' | '),b:1}];
+  rows.forEach((r,i)=>out.push({t:(i+1)+'. '+cols.map(c=>String(r[c.k]??'').replace(/\s*\n\s*/g,' / ')).join(' | ')}));
+  if(!rows.length) out.push({t:'(belum ada data)'});
+  return out;
+}
+function cardLines(key,i){
+  const it=(DB[key]||[])[i]||{},F=(TABLES[key]||{}).fields||[],I=ID();
+  const out=[{t:it.judul||'Tanpa judul',b:1},
+    {t:`${I.sekolah||''} - ${I.mapel||''} - Kelas ${I.kelas||'-'} - TA ${I.tahun||'-'}`}];
+  F.forEach(([c,l])=>{
+    if(c==='judul') return;
+    out.push({t:' '});out.push({t:l,b:1});
+    String(it[c]||'-').split(/\n/).forEach(t=>out.push({t}));
+  });
+  return out;
+}
+function ex(fmt,key){
+  const base=`${LABELS[key]||key}-${kelasSlug()}`;
+  const lines=headLines(LABELS[key]||key).concat(tableLines(key));
+  if(fmt==='pdf') download(pdfBlob(lines),base+'.pdf');
+  else download(docxBlob(lines),base+'.docx');
+}
+function pdfItem(key,i){
+  const it=(DB[key]||[])[i]||{};
+  const name=(it.judul||key).replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||key;
+  download(pdfBlob(cardLines(key,i)),name+'.pdf');
+}
+function pdfBlob(lines){
+  const W=842,H=595,M=36,LH=12,FS=9,MAX=165;
+  const wrapped=[];
+  lines.forEach(L=>{
+    const txt=String(L.t??'').replace(/✓/g,'X').replace(/[^\x20-\x7E -ÿ]/g,'?');
+    if(!txt.trim()){wrapped.push({t:' ',b:0});return}
+    let s=txt;
+    while(s.length>MAX){
+      let cut=s.lastIndexOf(' ',MAX);if(cut<40)cut=MAX;
+      wrapped.push({t:s.slice(0,cut),b:L.b});
+      s='    '+s.slice(cut).trimStart();
+    }
+    wrapped.push({t:s,b:L.b});
+  });
+  const per=Math.floor((H-2*M)/LH);
+  const pages=[];for(let i=0;i<wrapped.length;i+=per)pages.push(wrapped.slice(i,i+per));
+  if(!pages.length) pages.push([]);
+  const pe=s=>s.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+  const objs=[
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${pages.map((_,j)=>`${5+2*j} 0 R`).join(' ')}] /Count ${pages.length} >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'
+  ];
+  pages.forEach((pg,j)=>{
+    let s='BT\n';let y=H-M-FS;
+    pg.forEach(L=>{s+=`/${L.b?'F2':'F1'} ${FS} Tf 1 0 0 1 ${M} ${y} Tm (${pe(L.t)}) Tj\n`;y-=LH});
+    s+='ET';
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6+2*j} 0 R >>`);
+    objs.push(`<< /Length ${s.length} >>\nstream\n${s}\nendstream`);
+  });
+  let out='%PDF-1.4\n';const offs=[];
+  objs.forEach((o,k)=>{offs.push(out.length);out+=`${k+1} 0 obj\n${o}\nendobj\n`});
+  const xref=out.length;
+  out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;
+  offs.forEach(o=>{out+=String(o).padStart(10,'0')+' 00000 n \n'});
+  out+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([Uint8Array.from(out,c=>c.charCodeAt(0)&0xFF)],{type:'application/pdf'});
+}
+const WEIGHTS={tugas:40,aktif:30,hadir:15,uh:5,ujian:10};
+function rubrikP(p){
+  DB.rubrik=DB.rubrik||{};
+  DB.rubrik[p]=DB.rubrik[p]||{materi:'',ind:[
+    {t:'Hasil tugas pertemuan',k:'tugas'},
+    {t:'Keaktifan selama pembelajaran',k:'aktif'},
+    {t:'Sikap: disiplin, kerja sama, tanggung jawab',k:'sikap'}
+  ],nilai:{}};
+  return DB.rubrik[p];
+}
+function ppScore(p,i,kind){
+  const R=(DB.rubrik||{})[p];if(!R) return null;
+  const sc=(R.nilai||{})[i]||[];const vals=[];
+  R.ind.forEach((x,j)=>{if(x.k===kind){const v=sc[j];if(v!==undefined&&v!==''&&!isNaN(+v))vals.push(+v)}});
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+}
+function compRubrik(i,kind){
+  const arr=[];for(let p=0;p<16;p++){const v=ppScore(p,i,kind);if(v!==null)arr.push(v)}
+  return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
+}
+function dateHead(){
+  const tg=DB.tglPert||[];
+  return `<tr><th>Tanggal</th><th></th>${Array.from({length:16},(_,p)=>`<th><input type="date" data-k="tglPert" data-i="${p}" value="${esc(tg[p]||'')}" style="min-width:130px"></th>`).join('')}<th></th></tr>`;
+}
+function uhList(i){
+  return (((DB.uh||{})[i])||[]).filter(v=>v!==undefined&&v!==''&&!isNaN(+v)).map(Number);
+}
+function comps(i){
+  const uj=(DB.ujian||{})[i],u=uhList(i),hd=kehadiran(i);
+  return {
+    tugas:compRubrik(i,'tugas'),
+    aktif:compRubrik(i,'aktif'),
+    sikap:compRubrik(i,'sikap'),
+    hadir:hd===''?null:hd,
+    uh:u.length?u.reduce((a,b)=>a+b,0)/u.length:null,
+    ujian:(uj===undefined||uj==='')?null:+uj
+  };
+}
+function pgRubrik(){
+  const S=DB.siswa||[];
+  const p=DB.pertSel||0;
+  const R=rubrikP(p);
+  const sel=`<div class="card noprint"><label>Pertemuan: <select onchange="DB.pertSel=+this.value;save();render()">${Array.from({length:16},(_,k)=>`<option value="${k}"${k===p?' selected':''}>Pertemuan ${k+1}</option>`).join('')}</select></label></div>`;
+  const mat=`<div class="card"><label class="f"><b>Materi pertemuan ${p+1}</b><input data-k="rubMat" data-p="${p}" value="${esc(R.materi)}"></label>
+  <label class="f" style="margin-top:8px"><b>Tanggal pelaksanaan</b><input type="date" data-k="tglPert" data-i="${p}" value="${esc((DB.tglPert||[])[p]||'')}" style="max-width:220px"></label></div>`;
+  const ind=`<div class="card"><h3>Indikator penilaian</h3><div style="overflow:auto"><table>
+  <thead><tr><th style="width:34px">No</th><th>Indikator</th><th style="width:130px">Jenis</th><th class="noprint" style="width:40px"></th></tr></thead><tbody>
+  ${R.ind.map((x,j)=>`<tr><td>${j+1}</td>
+    <td><input data-k="rubInd" data-p="${p}" data-i="${j}" data-c="t" value="${esc(x.t)}"></td>
+    <td><select data-k="rubInd" data-p="${p}" data-i="${j}" data-c="k">${[['tugas','Tugas'],['aktif','Keaktifan'],['sikap','Sikap']].map(([v,l])=>`<option value="${v}"${x.k===v?' selected':''}>${l}</option>`).join('')}</select></td>
+    <td class="noprint"><button class="btn r" data-act="delInd" data-p="${p}" data-i="${j}">×</button></td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="toolbar noprint"><button class="btn" data-act="addInd" data-p="${p}">+ Tambah indikator</button></div></div>`;
+  const grid=S.length?`<div class="card"><h3>Penilaian siswa (0-100)</h3><div style="overflow:auto"><table>
+  <thead><tr><th>No</th><th>Nama</th>${R.ind.map((x,j)=>`<th>${esc(x.t)||'Indikator '+(j+1)}</th>`).join('')}<th>Tugas</th><th>Keaktifan</th><th>Sikap</th></tr></thead><tbody>
+  ${S.map((s,i)=>`<tr><td>${i+1}</td><td style="white-space:nowrap">${esc(s.nama)}</td>
+    ${R.ind.map((x,j)=>`<td><input type="number" min="0" max="100" data-k="rubNil" data-p="${p}" data-i="${i}" data-d="${j}" value="${esc((((R.nilai||{})[i]||[])[j])??'')}" style="width:72px"></td>`).join('')}
+    ${['tugas','aktif','sikap'].map(kd=>`<td data-calc="pp" data-st="${p}|${kd}" data-i="${i}">${CALC.pp(`${p}|${kd}`,i)}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div><p class="hint">Nilai per indikator 0-100. Kolom Tugas, Keaktifan, dan Sikap dihitung otomatis dari indikator berjenis sama.</p></div>`
+  :`<div class="card hint">Isi Data Siswa dulu di menu 16. Data Nilai.</div>`;
+  return P(`Rubrik Penilaian — Pertemuan ${p+1}`, sel+mat+ind+grid);
+}
+function pgUlangan(){
+  const S=DB.siswa||[];
+  if(!S.length) return P('Ulangan Harian & Ujian','<div class="card hint">Isi Data Siswa dulu di menu 16. Data Nilai.</div>');
+  const cols=DB.uhCols||[];
+  const rows=S.map((s,i)=>{
+    const sc=(DB.uh||{})[i]||[];
+    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${esc(s.nama)}</td>
+    ${cols.map((c,j)=>`<td><input type="number" min="0" max="100" data-k="uh" data-i="${i}" data-d="${j}" value="${esc(sc[j]??'')}" style="width:72px"></td>`).join('')}
+    <td data-calc="uhAvg" data-i="${i}">${CALC.uhAvg('',i)}</td>
+    <td><input type="number" min="0" max="100" data-k="ujian" data-i="${i}" value="${esc((DB.ujian||{})[i]??'')}" style="width:72px"></td></tr>`;
+  }).join('');
+  return P('Ulangan Harian & Ujian',
+  `<div class="card noprint"><div class="toolbar"><button class="btn" data-act="addUh">+ Tambah kolom ulangan</button></div>
+  <p class="hint">Isi nama kolom sesuai bab, misalnya "Bab 1 UH 1". Disarankan 2 sampai 3 kali ulangan harian per bab.</p></div>
+  <div class="card"><div style="overflow:auto"><table><thead><tr><th>No</th><th>Nama</th>
+  ${cols.map((c,j)=>`<th><input data-k="uhCol" data-i="${j}" value="${esc(c)}" style="min-width:110px"><button class="btn r noprint" data-act="delUh" data-i="${j}" style="margin-top:4px">×</button></th>`).join('')}
+  <th>Rata-rata UH</th><th>Ujian</th></tr></thead><tbody>${rows}</tbody></table></div></div>`);
+}
+function pgNilai(){
+  const S=DB.siswa||[];
+  if(!S.length) return P('Daftar Nilai','<div class="card hint">Isi Data Siswa dulu di menu 16. Data Nilai.</div>');
+  const f=v=>(v===null||v===undefined)?'-':v.toFixed(1);
+  const rows=S.map((s,i)=>{
+    const c=comps(i),a=rata(i);
+    return `<tr><td>${i+1}</td><td style="white-space:nowrap">${esc(s.nama)}</td>
+    <td>${f(c.tugas)}</td><td>${f(c.aktif)}</td><td>${f(c.hadir)}</td><td>${f(c.uh)}</td><td>${f(c.ujian)}</td>
+    <td><b>${a||'-'}</b></td><td>${predikat(a)}</td><td>${CALC.status('',i)}</td><td>${f(c.sikap)}</td></tr>`;
+  }).join('');
+  return P('Daftar Nilai (Rekap Keseluruhan)',
+  `<div class="card"><div style="overflow:auto"><table><thead><tr>
+  <th>No</th><th>Nama Siswa</th><th>Tugas (40%)</th><th>Keaktifan (30%)</th><th>Kehadiran (15%)</th><th>Ulangan Harian (5%)</th><th>Ujian (10%)</th>
+  <th>Nilai Akhir</th><th>Predikat</th><th>Status</th><th>Sikap (info)</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="hint">Komponen yang belum ada nilainya tidak ikut dihitung, dan bobotnya dinormalisasi. Status: di bawah ${kkm()} tidak tuntas, ${kkm()} sampai di bawah ${batasKompeten()} tuntas, ${batasKompeten()} ke atas kompeten. Kehadiran hanya dihitung H.</p></div>`);
+}
+
+/* ---------- ekspor & impor (Excel, CSV, Word) — berjalan offline ---------- */
+const LABELS={atp:'ATP',cptp:'CP-TP',prota:'Prota',promes:'Promes',kktp:'KKTP',jurnal:'Jurnal',admin:'Administrasi-Wali-Kelas',siswa:'Data-Siswa'};
+const kelasSlug=()=>(ID().kelas||'kelas').replace(/\s+/g,'_');
+function download(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function zipStore(files){ // tanpa kompresi (metode 0), cukup untuk xlsx/docx
+  const enc=new TextEncoder(),parts=[],central=[];let off=0;
+  files.forEach(f=>{
+    const nb=enc.encode(f.name),d=f.data,crc=crc32(d);
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0,true);lh.setUint16(8,0,true);
+    lh.setUint16(10,0,true);lh.setUint16(12,0x21,true);lh.setUint32(14,crc,true);lh.setUint32(18,d.length,true);
+    lh.setUint32(22,d.length,true);lh.setUint16(26,nb.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nb,d);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0,true);
+    ch.setUint16(10,0,true);ch.setUint16(12,0,true);ch.setUint16(14,0x21,true);ch.setUint32(16,crc,true);
+    ch.setUint32(20,d.length,true);ch.setUint32(24,d.length,true);ch.setUint16(28,nb.length,true);
+    ch.setUint16(30,0,true);ch.setUint16(32,0,true);ch.setUint16(34,0,true);ch.setUint16(36,0,true);
+    ch.setUint32(38,0,true);ch.setUint32(42,off,true);
+    central.push(new Uint8Array(ch.buffer),nb);
+    off+=30+nb.length+d.length;
+  });
+  let csize=0;central.forEach(p=>csize+=p.length);
+  const end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);
+  end.setUint32(12,csize,true);end.setUint32(16,off,true);
+  return new Blob([...parts,...central,new Uint8Array(end.buffer)],{type:'application/zip'});
+}
+async function unzip(buf){
+  const dv=new DataView(buf),u8=new Uint8Array(buf),dec=new TextDecoder(),out={};
+  let e=-1;for(let i=u8.length-22;i>=0;i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break}}
+  if(e<0) throw new Error('bukan zip');
+  const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);
+  for(let k=0;k<n;k++){
+    const method=dv.getUint16(p+10,true),csz=dv.getUint32(p+20,true);
+    const nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true);
+    const lo=dv.getUint32(p+42,true);
+    const name=dec.decode(u8.subarray(p+46,p+46+nl));
+    const lnl=dv.getUint16(lo+26,true),lxl=dv.getUint16(lo+28,true);
+    const start=lo+30+lnl+lxl;const data=u8.subarray(start,start+csz);
+    let bytes=data;
+    if(method===8){
+      const r=new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      bytes=new Uint8Array(await r.arrayBuffer());
+    }
+    out[name]=bytes;p+=46+nl+xl+cl;
+  }
+  return out;
+}
+function xlsxBlob(sheets){
+  const enc=new TextEncoder();
+  const cn=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+  const cellXml=(v,ref)=>{
+    if(v===''||v==null) return '';
+    if(typeof v==='number'&&isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+    return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+  };
+  const S=sheets.map(s=>({name:String(s.name).replace(/[\\\/?*\[\]:]/g,' ').slice(0,31)||'Sheet',rows:s.rows}));
+  const H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const files=[
+    {name:'[Content_Types].xml',data:enc.encode(H+`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${S.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`)},
+    {name:'_rels/.rels',data:enc.encode(H+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`)},
+    {name:'xl/workbook.xml',data:enc.encode(H+`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${S.map((s,i)=>`<sheet name="${esc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`)},
+    {name:'xl/_rels/workbook.xml.rels',data:enc.encode(H+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${S.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}</Relationships>`)}
+  ];
+  S.forEach((s,i)=>{
+    const xml=H+`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${s.rows.map((r,ri)=>`<row r="${ri+1}">${r.map((v,ci)=>cellXml(v,cn(ci)+(ri+1))).join('')}</row>`).join('')}</sheetData></worksheet>`;
+    files.push({name:`xl/worksheets/sheet${i+1}.xml`,data:enc.encode(xml)});
+  });
+  return zipStore(files);
+}
+function cellVal(c,v){
+  if(c.t==='n'&&v!==''&&v!=null&&!isNaN(Number(v))) return Number(v);
+  return v??'';
+}
+function xlTable(key){
+  const T=TABLES[key];if(!T||!T.cols) return;
+  const rows=[T.cols.map(c=>c.l)].concat((DB[key]||[]).map(r=>T.cols.map(c=>cellVal(c,r[c.k]))));
+  const label=LABELS[key]||key;
+  download(xlsxBlob([{name:label,rows}]),`${label}-${kelasSlug()}.xlsx`);
+}
+function xlTemplate(){
+  download(xlsxBlob([{name:'Data Siswa',rows:[['NIS','Nama','L/P'],['','Contoh Nama Siswa','L']]}]),'format-data-siswa.xlsx');
+}
+function importBar(){
+  return `<div class="card noprint"><b>Impor / Ekspor Data Siswa</b>
+  <div class="toolbar" style="margin-top:8px"><label class="btn" style="cursor:pointer">Impor dari Excel / CSV<input type="file" accept=".xlsx,.csv" onchange="impSiswa(this)" style="display:none"></label>
+  <button class="btn g" onclick="xlTemplate()">Unduh format Excel</button></div>
+  <p class="hint">Baris pertama harus berisi judul kolom: NIS, Nama, L/P. Kolom NIS dan L/P boleh dikosongkan.</p></div>`;
+}
+function parseCSV(text){
+  const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim()!=='');
+  const d=((lines[0]||'').split(';').length>(lines[0]||'').split(',').length)?';':',';
+  return lines.map(l=>{
+    const out=[];let cur='',q=false;
+    for(let i=0;i<l.length;i++){
+      const ch=l[i];
+      if(q){if(ch==='"'){if(l[i+1]==='"'){cur+='"';i++}else q=false}else cur+=ch}
+      else if(ch==='"') q=true;
+      else if(ch===d){out.push(cur);cur=''}
+      else cur+=ch;
+    }
+    out.push(cur);return out;
+  });
+}
+async function readXlsxRows(buf){
+  const z=await unzip(buf),dec=new TextDecoder(),strs=[];
+  if(z['xl/sharedStrings.xml']){
+    const sd=new DOMParser().parseFromString(dec.decode(z['xl/sharedStrings.xml']),'application/xml');
+    Array.from(sd.getElementsByTagName('si')).forEach(si=>strs.push(Array.from(si.getElementsByTagName('t')).map(t=>t.textContent).join('')));
+  }
+  const sheet=z['xl/worksheets/sheet1.xml']||Object.keys(z).filter(n=>n.startsWith('xl/worksheets/')).map(n=>z[n])[0];
+  if(!sheet) throw new Error('tidak ada sheet');
+  const sd=new DOMParser().parseFromString(dec.decode(sheet),'application/xml');
+  const rows=[];
+  Array.from(sd.getElementsByTagName('c')).forEach(c=>{
+    const m=(c.getAttribute('r')||'').match(/^([A-Z]+)(\d+)$/);if(!m) return;
+    let ci=0;for(const ch of m[1]) ci=ci*26+(ch.charCodeAt(0)-64);ci--;
+    const ri=+m[2]-1,t=c.getAttribute('t');let v='';
+    if(t==='s'){const x=c.getElementsByTagName('v')[0];v=strs[+(x?x.textContent:0)]??''}
+    else if(t==='inlineStr'){v=Array.from(c.getElementsByTagName('t')).map(x=>x.textContent).join('')}
+    else{const x=c.getElementsByTagName('v')[0];v=x?x.textContent:''}
+    rows[ri]=rows[ri]||[];rows[ri][ci]=v;
+  });
+  return Array.from(rows,r=>r?Array.from(r,x=>x??''):[]);
+}
+async function impSiswa(inp){
+  const f=inp.files[0];if(!f) return;
+  let rows;
+  try{
+    rows=/\.csv$/i.test(f.name)?parseCSV(await f.text()):await readXlsxRows(await f.arrayBuffer());
+  }catch(e){alert('File tidak bisa dibaca. Pastikan formatnya .xlsx atau .csv.');return}
+  const h=(rows[0]||[]).map(x=>String(x).toLowerCase().trim());
+  const iNis=h.findIndex(x=>x==='nis'||x==='nisn');
+  const iNama=h.findIndex(x=>x.includes('nama'));
+  const iJk=h.findIndex(x=>x==='l/p'||x==='jk'||x.includes('kelamin'));
+  if(iNama<0){alert('Kolom "Nama" tidak ditemukan di baris pertama.');return}
+  const list=rows.slice(1).filter(r=>String(r[iNama]||'').trim()!=='').map(r=>({
+    nis:iNis>=0?String(r[iNis]||'').trim():'',
+    nama:String(r[iNama]).trim(),
+    jk:iJk>=0&&String(r[iJk]||'').trim().toUpperCase().startsWith('P')?'P':'L'
+  }));
+  if(!list.length){alert('Tidak ada data siswa yang terbaca.');return}
+  if(!confirm(`Ganti daftar siswa dengan ${list.length} siswa dari file ini?`)) return;
+  DB.siswa=list;save();render();
+}
+function docxBlob(paras){
+  const enc=new TextEncoder(),H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const body=paras.map(p=>`<w:p><w:r><w:rPr>${p.b?'<w:b/>':''}${p.sz?`<w:sz w:val="${p.sz}"/>`:''}</w:rPr><w:t xml:space="preserve">${esc(p.t)}</w:t></w:r></w:p>`).join('');
+  return zipStore([
+    {name:'[Content_Types].xml',data:enc.encode(H+`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`)},
+    {name:'_rels/.rels',data:enc.encode(H+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`)},
+    {name:'word/document.xml',data:enc.encode(H+`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>`)}
+  ]);
+}
+function docxItem(key,i){
+  const it=(DB[key]||[])[i]||{};const F=(TABLES[key]||{}).fields||[];
+  const I=ID();
+  const paras=[
+    {t:it.judul||'Tanpa judul',b:1,sz:32},
+    {t:`${I.sekolah||''} · ${I.mapel||''} · Kelas ${I.kelas||'-'} · TA ${I.tahun||'-'}`,sz:20}
+  ];
+  F.forEach(([c,l])=>{
+    if(c==='judul') return;
+    paras.push({t:l,b:1,sz:24});
+    String(it[c]||'-').split(/\n/).forEach(line=>paras.push({t:line}));
+  });
+  const name=(it.judul||key).replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||key;
+  download(docxBlob(paras),name+'.docx');
+}
+
+/* ---------- isian awal KIK TJKT (draf, sesuaikan dengan CP resmi) ---------- */
+function M(judul,alokasi,tujuan,pemahaman,pemantik,inti,asesmen,pengayaan,sumber){
+  return {judul,alokasi,tujuan,pemahaman,pemantik,
+    pembuka:'Guru membuka dengan pemantik, lalu siswa berbagi pengalaman terkait topik dalam 5 sampai 10 menit.',
+    inti,
+    penutup:'Siswa menyimpulkan pembelajaran dan menulis refleksi singkat: apa yang dipelajari, kesulitan, dan rencana tindak lanjut.',
+    asesmen,
+    remedial:'Siswa yang belum mencapai tujuan mengulang latihan dengan bimbingan guru dan contoh tambahan.',
+    pengayaan,sumber};
+}
+function buildLevel(atp,kks,inds,months,modul){
+  return {
+    atp,
+    cptp:atp.map((a,i)=>({elemen:a.elemen,cp:a.cp,tp:a.tp,kk:kks[i],materi:a.materi,indikator:inds[i]})),
+    prota:atp.map((a,i)=>{const r={materi:a.elemen,jp:a.jp};months[i].forEach(m=>r['b'+m]='✓');return r}),
+    promes:atp.map(a=>({pekan:'',tgl:'',materi:a.elemen,tp:a.tp,jp:a.jp,ket:'Semester '+a.sem})),
+    modul
+  };
+}
+const ATP_XI=[
+ {elemen:'Karakter Personal',cp:'Peserta didik mengenali minat, bakat, dan kekuatan dirinya sebagai dasar pengembangan kreativitas dan kewirausahaan.',tp:'Mengidentifikasi minat dan bakat diri melalui talent mapping; menjelaskan kekuatan dan area pengembangan diri.',materi:'Talent mapping; karakter personal dalam kewirausahaan',jp:4,sem:'1'},
+ {elemen:'Empati dan Identifikasi Masalah',cp:'Peserta didik mampu memahami kebutuhan pengguna dan merumuskan masalah sebagai peluang inovasi.',tp:'Melakukan wawancara atau observasi sederhana untuk memahami kebutuhan pengguna; merumuskan problem statement.',materi:'Tahap Empathize dan Define dalam Design Thinking',jp:4,sem:'1'},
+ {elemen:'Pengembangan Prototipe',cp:'Peserta didik mampu merancang dan membuat prototipe produk sederhana dengan pendekatan Design Thinking.',tp:'Membuat ide solusi (Ideate), membangun prototipe sederhana (Prototype), dan menguji bersama pengguna (Test).',materi:'Desain prototipe: ideate, prototype, test (contoh TJKT: monitor jaringan IoT sederhana)',jp:8,sem:'1'},
+ {elemen:'Pengembangan Produk Inovatif',cp:'Peserta didik mampu mengembangkan produk inovatif yang layak, bermanfaat, dan memiliki nilai jual.',tp:'Menyusun spesifikasi produk; menganalisis nilai tambah dan kelayakan sederhana; mempresentasikan rancangan produk.',materi:'Pengembangan produk inovatif, nilai tambah, dan presentasi',jp:8,sem:'2'}
+];
+const ATP_XII=[
+ {elemen:'Peluang Usaha TJKT',cp:'Peserta didik mampu mengidentifikasi peluang usaha di bidang jaringan dan telekomunikasi berdasarkan kebutuhan pasar.',tp:'Menganalisis peluang usaha jasa dan produk TJKT di lingkungan sekitar.',materi:'Peluang usaha: instalasi jaringan, IT support, layanan IoT',jp:4,sem:'1'},
+ {elemen:'Model Bisnis',cp:'Peserta didik mampu menyusun model bisnis dari ide usaha yang dikembangkan.',tp:'Menyusun Business Model Canvas dan menjelaskan segmen pelanggan, nilai tawar, dan sumber pendapatan.',materi:'Business Model Canvas',jp:6,sem:'1'},
+ {elemen:'Pemasaran Produk',cp:'Peserta didik mampu merancang strategi pemasaran sederhana untuk produk atau jasa usahanya.',tp:'Merancang bauran pemasaran (4P) dan kanal promosi digital sederhana.',materi:'Bauran pemasaran dan pemasaran digital',jp:6,sem:'2'},
+ {elemen:'Perencanaan Usaha',cp:'Peserta didik mampu menyusun rencana usaha dan perhitungan kelayakan sederhana.',tp:'Menghitung harga pokok, titik impas, dan proyeksi pendapatan sederhana; menilai kelayakan usaha.',materi:'Rencana usaha, harga pokok, titik impas',jp:6,sem:'2'},
+ {elemen:'Presentasi Usaha dan Refleksi',cp:'Peserta didik mampu mempresentasikan rencana usaha dan merefleksikan proses kewirausahaannya.',tp:'Mempresentasikan rencana usaha (pitching) dan menyusun refleksi pembelajaran.',materi:'Pitching, komunikasi usaha, refleksi',jp:6,sem:'2'}
+];
+const MOD_XI=[
+ M('Karakter Personal (Talent Mapping)','2 x 45 menit (4 JP)','Siswa mengenali minat, bakat, dan kekuatan dirinya serta menghubungkannya dengan peluang berwirausaha di bidang TJKT.','Potensi diri dapat dipetakan dan dikembangkan sebagai dasar memilih peran dalam tim usaha.','Apa yang kamu kerjakan dengan senang tanpa merasa lelah? Apa yang sering dipuji orang tentangmu?','Siswa mengisi kuesioner talent mapping, membuat peta kekuatan (minat, bakat, nilai, peluang), lalu berdiskusi dalam kelompok kecil tentang peran masing-masing dalam proyek TJKT.','Formatif: hasil peta talent dan refleksi tertulis. Sumatif: presentasi dua menit bertema Saya dan Peran Saya.','Siswa menyusun profil karakter personal lengkap dengan rekomendasi pengembangan diri.','Kuesioner talent mapping; lembar kerja peta diri; contoh profil kewirausahaan.'),
+ M('Pengembangan Prototipe dengan Design Thinking','4 x 45 menit (8 JP)','Siswa merancang dan menguji prototipe produk sederhana berbasis kebutuhan pengguna melalui lima tahap Design Thinking.','Prototipe adalah cara cepat menguji ide sebelum produk dibuat sungguh-sungguh; umpan balik pengguna menentukan arah perbaikan.','Jika kamu harus membantu warga desa yang kesulitan internet di rumah, apa yang pertama kamu tanyakan kepada mereka?','Empathize (wawancara pengguna), Define (problem statement), Ideate (brainstorming dan sketsa), Prototype (model sederhana dari kardus atau modul elektronik dasar), Test (uji dengan tiga pengguna dan catat umpan balik).','Formatif: lembar observasi tiap tahap. Sumatif: prototipe dan laporan iterasi dengan minimal dua kali revisi.','Siswa mengembangkan prototipe IoT sederhana, misalnya pemantau koneksi Wi-Fi atau pengingat perangkat jaringan.','Buku ajar KIK kelas XI; panduan Design Thinking; alat sederhana (kardus, kertas, papan prototipe).'),
+ M('Pengembangan Produk Inovatif','4 x 45 menit (8 JP)','Siswa mengembangkan produk inovatif yang layak, bernilai tambah, dan siap dipresentasikan.','Produk yang baik memenuhi kebutuhan pengguna, layak dibuat, dan memiliki keunggulan yang jelas dibanding alternatif.','Apa perbedaan produk biasa dan produk inovatif? Apa yang membuat orang mau membayar produk kamu?','Siswa menyusun spesifikasi produk, menganalisis nilai tambah, menghitung kelayakan sederhana (biaya bahan dibanding harga jual), lalu menyusun poster atau presentasi produk.','Asesmen: rubrik spesifikasi produk, perhitungan kelayakan, dan presentasi kelompok.','Siswa membuat rencana produksi batch kecil dan strategi promosi sederhana.','Panduan pengembangan produk; contoh katalog produk TJKT; lembar kerja kelayakan.')
+];
+const MOD_XII=[
+ M('Model Bisnis Kanvas (Business Model Canvas)','2 x 45 menit (6 JP)','Siswa menyusun model bisnis dari ide usaha TJKT yang mereka kembangkan.','Model bisnis menjelaskan bagaimana usaha menciptakan, menyampaikan, dan menangkap nilai.','Siapa pelanggan yang paling membutuhkan produkmu, dan apa yang mereka mau bayar?','Siswa mengisi sembilan blok BMC secara berkelompok, mempresentasikannya, lalu saling memberi masukan dengan teknik dua pujian dan satu saran.','Formatif: BMC awal dan revisi. Sumatif: BMC final disertai argumen tertulis satu halaman.','Siswa membandingkan dua model bisnis untuk ide yang sama dan menjelaskan keunggulannya.','Kanvas model bisnis; contoh usaha jasa jaringan lokal; lembar kerja BMC.'),
+ M('Pemasaran Produk dan Perencanaan Usaha','4 x 45 menit (6 JP)','Siswa merancang bauran pemasaran sederhana dan menghitung kelayakan dasar usahanya.','Harga harus menutup biaya dan memberi keuntungan; promosi yang tepat menjangkau pelanggan yang tepat.','Mengapa dua warung dengan menu yang sama bisa punya pelanggan yang berbeda?','Siswa menentukan 4P, menghitung harga pokok produksi dan titik impas sederhana, lalu membuat satu konten promosi digital.','Formatif: lembar perhitungan. Sumatif: rencana pemasaran dan perhitungan titik impas.','Siswa menyusun proyeksi penjualan tiga bulan dan skenario jika penjualan turun.','Contoh perhitungan harga pokok; panduan pemasaran digital sederhana.'),
+ M('Presentasi Usaha (Pitching) dan Refleksi','4 x 45 menit (6 JP)','Siswa mempresentasikan rencana usaha secara persuasif dan merefleksikan proses kewirausahaannya.','Presentasi yang baik fokus pada masalah, solusi, bukti, dan ajakan bertindak.','Jika kamu hanya punya dua menit di depan calon investor, apa yang paling ingin kamu sampaikan?','Siswa menyusun pitch lima menit (masalah, solusi, pasar, model bisnis, rencana keuangan), tampil di depan kelas, lalu menulis refleksi perjalanan proyek.','Asesmen: rubrik pitch dan jurnal refleksi.','Siswa menyiapkan tanya jawab dengan panel juri dari guru produktif atau praktisi.','Rubrik pitch; template refleksi; contoh pitch singkat.')
+];
+const KKS_XI=['Mengenali dan menyusun','Mengidentifikasi dan merumuskan','Membuat dan menguji','Menyusun dan mempresentasikan'];
+const INDS_XI=['Peserta didik menyelesaikan kuesioner talent mapping dan menyusun peta kekuatan diri.','Peserta didik menyusun problem statement berdasarkan hasil wawancara pengguna.','Peserta didik membuat prototipe dan mengujinya dengan minimal tiga pengguna.','Peserta didik menyusun spesifikasi dan perhitungan kelayakan, lalu mempresentasikan produk.'];
+const KKS_XII=['Mengidentifikasi dan menganalisis','Menyusun dan merancang','Merancang dan menerapkan','Menghitung dan menilai','Mempresentasikan dan merefleksikan'];
+const INDS_XII=['Peserta didik menuliskan minimal dua peluang usaha TJKT beserta analisis kebutuhan pasarnya.','Peserta didik menyelesaikan BMC lengkap dengan argumen untuk tiap blok.','Peserta didik menyusun bauran pemasaran dan satu konten promosi digital.','Peserta didik menghitung harga pokok, titik impas, dan menilai kelayakan usahanya.','Peserta didik mempresentasikan pitch dan menulis refleksi proses.'];
+const SEED={
+ XI:buildLevel(ATP_XI,KKS_XI,INDS_XI,[[1],[2],[3,4],[6,7]],MOD_XI),
+ XII:buildLevel(ATP_XII,KKS_XII,INDS_XII,[[0,1],[2,3],[6,7],[8,9],[10]],MOD_XII)
+};
+const KKTP_SEED=[
+ {min:90,predikat:'A (Sangat Baik)',desc:'Menguasai seluruh tujuan pembelajaran dengan sangat baik dan mandiri.'},
+ {min:80,predikat:'B (Baik)',desc:'Menguasai sebagian besar tujuan pembelajaran dengan baik.'},
+ {min:70,predikat:'C (Cukup)',desc:'Menguasai tujuan pembelajaran dasar, perlu sedikit penguatan.'},
+ {min:0,predikat:'D (Perlu Bimbingan)',desc:'Belum menguasai tujuan pembelajaran, perlu bimbingan dan remedial.'}
+];
+function seedProfile(c){
+  const x=clone(SEED[c.startsWith('XI ')?'XI':'XII']);
+  return {
+    id:{mapel:'Kreativitas, Inovasi dan Kewirausahaan (KIK)',kelas:c,konsentrasi:'Teknik Jaringan Komputer dan Telekomunikasi (TJKT)',semester:'Ganjil',tahun:'2026/2027',kkmTuntas:'87',batasKompeten:'95'},
+    atp:x.atp,cptp:x.cptp,prota:x.prota,promes:x.promes,modul:x.modul,kktp:clone(KKTP_SEED)
+  };
+}
+
+/* ---------- muat data & mulai ---------- */
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.profiles)STORE=s}catch(e){}
+CLASSES.forEach(c=>{if(!STORE.profiles[c])STORE.profiles[c]=seedProfile(c)});
+Object.values(STORE.profiles).forEach(p=>{
+  p.id=p.id||{};
+  if(p.id.kkmTuntas===undefined) p.id.kkmTuntas='87';
+  if(p.id.batasKompeten===undefined) p.id.batasKompeten='95';
+});
+if(!STORE.profiles[STORE.active])STORE.active=CLASSES[0];
+DB=STORE.profiles[STORE.active];
+/* tanggal tampil sebagai teks saat dicetak */
+function tglText(v){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||'');return m?`${m[3]}-${m[2]}-${m[1]}`:''}
+window.addEventListener('beforeprint',()=>{
+  document.querySelectorAll('input[type=date]').forEach(el=>{
+    let s=el.nextElementSibling;
+    if(!s||!s.classList.contains('pv')){s=document.createElement('span');s.className='pv';el.after(s)}
+    s.textContent=tglText(el.value);
+  });
+});
+render();
+</script>
+</body>
+</html>
