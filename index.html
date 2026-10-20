@@ -66,10 +66,10 @@ textarea{min-height:60px;resize:vertical}
 
 <script>
 const KEY='perangkatAjar.v2';
-const CLASSES=['XI TJKT 1','XI TJKT 2','XII TJKT 1','XII TJKT 2','XII TJKT 3'];
+let CLASSES=['XI TJKT 1','XI TJKT 2','XII TJKT 1','XII TJKT 2','XII TJKT 3'];
 let STORE={active:CLASSES[0],profiles:{}};
 let DB={};
-function save(){try{localStorage.setItem(KEY,JSON.stringify(STORE))}catch(e){}}
+function save(){STORE.classes=CLASSES;try{localStorage.setItem(KEY,JSON.stringify(STORE))}catch(e){}}
 
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -360,7 +360,7 @@ const PAGES=[
 
 let cur='id';
 function render(){
-  document.getElementById('nav').innerHTML=classSelect()+PAGES.map(([id,l])=>`<button class="${id===cur?'on':''}" onclick="go('${id}')">${l}</button>`).join('');
+  document.getElementById('nav').innerHTML=classSelect()+kelasButtons()+PAGES.map(([id,l])=>`<button class="${id===cur?'on':''}" onclick="go('${id}')">${l}</button>`).join('');
   const p=PAGES.find(x=>x[0]===cur);
   document.getElementById('main').innerHTML=p[2]();
   refreshCalc();
@@ -491,6 +491,42 @@ function pdfBlob(lines){
   offs.forEach(o=>{out+=String(o).padStart(10,'0')+' 00000 n \n'});
   out+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([Uint8Array.from(out,c=>c.charCodeAt(0)&0xFF)],{type:'application/pdf'});
+}
+
+/* ---------- tambah & hapus kelas secara manual ---------- */
+function blankProfile(c){
+  return {id:{kelas:c,semester:'Ganjil',tahun:'2026/2027',kkmTuntas:'87',batasKompeten:'95'},kktp:clone(KKTP_SEED)};
+}
+function addKelas(){
+  const nama=(prompt('Nama kelas baru (contoh: X TKJ 1, XI TJKT 3, XII AK 2):')||'').trim();
+  if(!nama) return;
+  if(CLASSES.includes(nama)){alert('Nama kelas sudah ada.');return}
+  CLASSES.push(nama);
+  STORE.profiles[nama]=blankProfile(nama);
+  STORE.active=nama;DB=STORE.profiles[nama];save();render();
+}
+function delKelas(){
+  if(CLASSES.length<=1){alert('Minimal harus ada satu kelas.');return}
+  const c=STORE.active;
+  if(!confirm(`Hapus kelas "${c}" beserta seluruh datanya? Tindakan ini tidak bisa dibatalkan.`)) return;
+  CLASSES=CLASSES.filter(x=>x!==c);
+  delete STORE.profiles[c];
+  STORE.active=CLASSES[0];DB=STORE.profiles[STORE.active];save();render();
+}
+function renameKelas(){
+  const lama=STORE.active;
+  const nama=(prompt('Nama baru untuk kelas "'+lama+'":',lama)||'').trim();
+  if(!nama||nama===lama) return;
+  if(CLASSES.includes(nama)){alert('Nama kelas sudah ada.');return}
+  CLASSES=CLASSES.map(x=>x===lama?nama:x);
+  STORE.profiles[nama]=STORE.profiles[lama];
+  delete STORE.profiles[lama];
+  DB=STORE.profiles[nama];
+  DB.id=DB.id||{};DB.id.kelas=nama;
+  STORE.active=nama;save();render();
+}
+function kelasButtons(){
+  return `<div class="toolbar noprint" style="margin:-4px 0 10px"><button class="btn" onclick="addKelas()">+ Tambah kelas</button><button class="btn g" onclick="renameKelas()">Ubah nama</button><button class="btn r" onclick="delKelas()">Hapus kelas</button></div>`;
 }
 const WEIGHTS={tugas:40,aktif:30,hadir:15,uh:5,ujian:10};
 function rubrikP(p){
@@ -832,6 +868,7 @@ function seedProfile(c){
 
 /* ---------- muat data & mulai ---------- */
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.profiles)STORE=s}catch(e){}
+if(Array.isArray(STORE.classes)&&STORE.classes.length)CLASSES=STORE.classes;
 CLASSES.forEach(c=>{if(!STORE.profiles[c])STORE.profiles[c]=seedProfile(c)});
 Object.values(STORE.profiles).forEach(p=>{
   p.id=p.id||{};
